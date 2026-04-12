@@ -3,32 +3,27 @@ import joblib
 import pandas as pd
 import google.generativeai as genai
 import os
-from datetime import datetime
 
-# --- 1. CONFIG ---
-# Securely load the model using the absolute path
+# --- 1. CONFIG & SETUP ---
+st.set_page_config(page_title="AI Credit Risk Agent", layout="wide")
+
+# Securely load the model
 model_path = os.path.join(os.path.dirname(__file__), 'credit_model.pkl')
 
 try:
     model = joblib.load(model_path)
 except Exception as e:
-    st.error(f"Model file not found at {model_path}. Error: {e}")
-    st.stop() # Stops the app if the model isn't loaded
+    st.error(f"Model file not found. Error: {e}")
+    st.stop()
 
-# Configure GenAI with Streamlit Secrets
+# Configure GenAI
+# Ensure the key in your Streamlit Secrets dashboard is named exactly 'GOOGLE_API_KEY'
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 chat_model = genai.GenerativeModel('gemini-1.5-flash')
 
-st.set_page_config(page_title="AI Credit Risk Agent", layout="wide")
-
-# --- 2. SIDEBAR ---
+# --- 2. SIDEBAR (Inputs) ---
 with st.sidebar:
-    st.title("🤖 Risk Advisor")
-    if prompt := st.chat_input("Ask about risk..."):
-        with st.chat_message("assistant"):
-            response = chat_model.generate_content(f"Context: Credit Risk Analyst. Answer: {prompt}")
-            st.markdown(response.text)
-
+    st.title("🤖 Risk Advisor Settings")
     st.header("Applicant Profile")
     applicant_name = st.text_input("Applicant Name", "John Doe")
     cibil = st.slider("CIBIL Score", 300, 900, 750)
@@ -40,6 +35,17 @@ with st.sidebar:
 
 # --- 3. MAIN LOGIC ---
 st.title("🏦 AI Credit Risk Agent")
+
+# Chat Interface (Moved to main area)
+if prompt := st.chat_input("Ask the Risk Advisor about this profile..."):
+    with st.chat_message("user"):
+        st.write(prompt)
+    with st.chat_message("assistant"):
+        with st.spinner("Analyzing..."):
+            response = chat_model.generate_content(f"Context: Credit Risk Analyst. Profile: {applicant_name}, CIBIL: {cibil}, Income: {income}, Loan: {loan}. Answer: {prompt}")
+            st.markdown(response.text)
+
+st.markdown("---")
 st.markdown("### Strict Financial Assessment Mode")
 
 if st.button("Run Assessment", use_container_width=True):
@@ -49,13 +55,13 @@ if st.button("Run Assessment", use_container_width=True):
     ]], columns=['no_of_dependents', 'education_encoded', 'self_employed_encoded', 
                  'income_annum', 'loan_amount', 'loan_term', 'cibil_score'])
     
-    # Predict using the loaded model
+    # Predict
     prob = model.predict_proba(input_df)[0][1]
     
-    # --- STRICT OVERRIDE ---
+    # Strict Override Logic
     if loan > income:
-        prob = prob * 0.5  # Heavy penalty for high debt-to-income
-        st.warning("⚠️ **Alert:** Loan amount exceeds annual income. High probability of repayment distress.")
+        prob = prob * 0.5
+        st.warning("⚠️ **Alert:** Loan amount exceeds annual income.")
 
     decision = "APPROVED" if prob > 0.5 else "REJECTED"
     
@@ -63,20 +69,18 @@ if st.button("Run Assessment", use_container_width=True):
     with col1:
         if decision == "APPROVED":
             st.success(f"### {decision}")
-            st.metric("Final Confidence Score", f"{prob*100:.1f}%")
         else:
             st.error(f"### {decision}")
-            st.metric("Adjusted Risk Score", f"{(1-prob)*100:.1f}%")
+        st.metric("Probability of Repayment", f"{prob*100:.1f}%")
 
     with col2:
-        st.subheader("Why this decision?")
+        st.subheader("Decision Insight")
         if loan > income:
-            st.write("❌ **Debt-to-Income Crisis:** The applicant is trying to borrow more than they earn in a year.")
+            st.write("❌ Debt-to-Income Ratio is too high.")
         if cibil < 600:
-            st.write("❌ **Historical Default Risk:** Past behavior indicates poor repayment reliability.")
+            st.write("❌ Low CIBIL score indicates high risk.")
         if prob > 0.7:
-            st.write("✅ **Stable Profile:** Income sufficiently covers the debt obligation.")
+            st.write("✅ Profile is within healthy risk parameters.")
 
-    # DOWNLOAD REPORT
     report = f"REPORT FOR {applicant_name}\nDECISION: {decision}\nCIBIL: {cibil}\nDTI Ratio: {round(loan/income, 2)}"
     st.download_button("📥 Download Final Audit Report", data=report, file_name=f"Loan_{applicant_name}.txt")
