@@ -2,15 +2,21 @@ import streamlit as st
 import joblib
 import pandas as pd
 import google.generativeai as genai
+import os
 from datetime import datetime
 
 # --- 1. CONFIG ---
-try:
-    model = joblib.load('credit_model.pkl')
-except:
-    st.error("Model file not found!")
+# Securely load the model using the absolute path
+model_path = os.path.join(os.path.dirname(__file__), 'credit_model.pkl')
 
-genai.configure(api_key="AIzaSyDLgOGqGxNrATYwTn3sXtJLQuh1ecE1TN0")
+try:
+    model = joblib.load(model_path)
+except Exception as e:
+    st.error(f"Model file not found at {model_path}. Error: {e}")
+    st.stop() # Stops the app if the model isn't loaded
+
+# Configure GenAI with Streamlit Secrets
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 chat_model = genai.GenerativeModel('gemini-1.5-flash')
 
 st.set_page_config(page_title="AI Credit Risk Agent", layout="wide")
@@ -43,11 +49,10 @@ if st.button("Run Assessment", use_container_width=True):
     ]], columns=['no_of_dependents', 'education_encoded', 'self_employed_encoded', 
                  'income_annum', 'loan_amount', 'loan_term', 'cibil_score'])
     
+    # Predict using the loaded model
     prob = model.predict_proba(input_df)[0][1]
     
-    # --- NEW: THE "STRICT" OVERRIDE ---
-    # If loan is greater than 100% of annual income for a short term, 
-    # we manually lower the probability score.
+    # --- STRICT OVERRIDE ---
     if loan > income:
         prob = prob * 0.5  # Heavy penalty for high debt-to-income
         st.warning("⚠️ **Alert:** Loan amount exceeds annual income. High probability of repayment distress.")
@@ -66,7 +71,7 @@ if st.button("Run Assessment", use_container_width=True):
     with col2:
         st.subheader("Why this decision?")
         if loan > income:
-            st.write("❌ **Debt-to-Income Crisis:** The applicant is trying to borrow more than they earn in a year. Even with a high CIBIL, the cash flow is insufficient.")
+            st.write("❌ **Debt-to-Income Crisis:** The applicant is trying to borrow more than they earn in a year.")
         if cibil < 600:
             st.write("❌ **Historical Default Risk:** Past behavior indicates poor repayment reliability.")
         if prob > 0.7:
