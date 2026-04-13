@@ -19,7 +19,7 @@ except Exception as e:
 # Configure GenAI
 # Ensure the key in your Streamlit Secrets dashboard is named exactly 'GOOGLE_API_KEY'
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-chat_model = genai.GenerativeModel('gemini-1.5-flash')
+chat_model = genai.GenerativeModel('gemini-1.5-pro')
 
 # --- 2. SIDEBAR (Inputs) ---
 with st.sidebar:
