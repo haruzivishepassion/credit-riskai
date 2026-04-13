@@ -17,9 +17,14 @@ except Exception as e:
     st.stop()
 
 # Configure GenAI
-# Ensure the key in your Streamlit Secrets dashboard is named exactly 'GOOGLE_API_KEY'
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-chat_model = genai.GenerativeModel('gemini-1.5-pro')
+try:
+    # Ensure 'GOOGLE_API_KEY' is in your Streamlit Secrets
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    # Using 'gemini-pro' for maximum compatibility
+    chat_model = genai.GenerativeModel('gemini-pro')
+except Exception as e:
+    st.error(f"AI Configuration Error: {e}")
+    chat_model = None
 
 # --- 2. SIDEBAR (Inputs) ---
 with st.sidebar:
@@ -36,14 +41,23 @@ with st.sidebar:
 # --- 3. MAIN LOGIC ---
 st.title("🏦 AI Credit Risk Agent")
 
-# Chat Interface (Moved to main area)
+# Chat Interface (Integrated with error handling)
 if prompt := st.chat_input("Ask the Risk Advisor about this profile..."):
     with st.chat_message("user"):
         st.write(prompt)
+    
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing..."):
-            response = chat_model.generate_content(f"Context: Credit Risk Analyst. Profile: {applicant_name}, CIBIL: {cibil}, Income: {income}, Loan: {loan}. Answer: {prompt}")
-            st.markdown(response.text)
+        if chat_model:
+            with st.spinner("Analyzing..."):
+                try:
+                    full_prompt = f"Context: Credit Risk Analyst. Profile: {applicant_name}, CIBIL: {cibil}, Income: {income}, Loan: {loan}. Answer: {prompt}"
+                    response = chat_model.generate_content(full_prompt)
+                    st.markdown(response.text)
+                except Exception as e:
+                    st.error("AI service is currently unreachable.")
+                    st.write(f"Diagnostic info: {e}")
+        else:
+            st.error("AI Advisor is not configured.")
 
 st.markdown("---")
 st.markdown("### Strict Financial Assessment Mode")
